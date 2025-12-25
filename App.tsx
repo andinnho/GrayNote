@@ -3,7 +3,15 @@ import { format, parseISO } from 'date-fns';
 import { Menu, X } from 'lucide-react';
 
 import { DiaryEntry, AppSettings } from './types';
-import { loadEntries, saveEntries, loadSettings, saveSettings } from './utils/storage';
+import { 
+  loadEntries, 
+  saveEntries, 
+  loadSettings, 
+  saveSettings, 
+  fetchAndMergeEntries, 
+  upsertEntryToSupabase,
+  deleteEntryFromSupabase 
+} from './utils/storage';
 import { formatDateForStorage, formatDateForDisplay } from './utils/dateUtils';
 
 import { Sidebar } from './components/Sidebar';
@@ -29,8 +37,28 @@ const App: React.FC = () => {
 
   // Initialize
   useEffect(() => {
-    const loadedEntries = loadEntries();
-    setEntries(loadedEntries);
+    // 1. Load Local first for instant UI
+    const localData = loadEntries();
+    setEntries(localData);
+    
+    // 2. Fetch Remote and Merge
+    fetchAndMergeEntries(localData).then(mergedData => {
+      // Only update if there are changes to avoid unnecessary re-renders or loops
+      if (JSON.stringify(mergedData) !== JSON.stringify(localData)) {
+        setEntries(mergedData);
+        saveEntries(mergedData); // Update local cache
+        
+        // Refresh editor content if the current day was updated
+        const updatedCurrentEntry = mergedData[dateKey];
+        if (updatedCurrentEntry) {
+          setEditorContent(updatedCurrentEntry.content);
+          setEditorTags(updatedCurrentEntry.tags);
+          if (editorRef.current) {
+            editorRef.current.innerHTML = updatedCurrentEntry.content;
+          }
+        }
+      }
+    });
     
     // Apply theme on load
     if (settings.darkMode) {
@@ -39,7 +67,7 @@ const App: React.FC = () => {
       document.documentElement.classList.remove('dark');
     }
 
-    // Auto-fix contrast if user loads into dark mode with default light text color
+    // Auto-fix contrast
     const defaultLightColor = '#111827';
     const defaultDarkColor = '#F3F4F6';
     if (settings.darkMode && settings.editorColor === defaultLightColor) {
@@ -78,8 +106,7 @@ const App: React.FC = () => {
   // Save logic
   const handleSave = useCallback(() => {
     setSaving(true);
-    // Sanitize content slightly (optional, but good for removing empty tags)
-    // For now we trust contentEditable
+    // Sanitize content
     const content = editorRef.current?.innerHTML || '';
     
     const newEntry: DiaryEntry = {
@@ -92,15 +119,28 @@ const App: React.FC = () => {
 
     const newEntries = { ...entries, [dateKey]: newEntry };
     setEntries(newEntries);
-    saveEntries(newEntries);
+    saveEntries(newEntries); // Local Save
     
-    setTimeout(() => setSaving(false), 500);
+    // Remote Save (Fire and forget, but handle error in console)
+    upsertEntryToSupabase(newEntry).then(() => {
+        setSaving(false);
+    }).catch(() => {
+        setSaving(false);
+    });
+    
   }, [dateKey, entries, editorTags]);
 
-  // Auto-save debounce (optional but requested "Offline" reliability)
+  // Auto-save debounce
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (editorRef.current && editorRef.current.innerHTML !== (entries[dateKey]?.content || '')) {
+      // Check if content actually changed to avoid spamming DB
+      const currentStored = entries[dateKey];
+      const currentHtml = editorRef.current?.innerHTML || '';
+      
+      const contentChanged = currentHtml !== (currentStored?.content || '');
+      const tagsChanged = JSON.stringify(editorTags) !== JSON.stringify(currentStored?.tags || []);
+
+      if (editorRef.current && (contentChanged || tagsChanged)) {
         handleSave();
       }
     }, 2000);
@@ -111,7 +151,6 @@ const App: React.FC = () => {
   const handleFormat = (command: string, value?: string) => {
     document.execCommand(command, false, value);
     editorRef.current?.focus();
-    // Trigger content update for state
     setEditorContent(editorRef.current?.innerHTML || '');
   };
 
@@ -130,7 +169,9 @@ const App: React.FC = () => {
     if (window.confirm('Are you sure you want to clear this entry?')) {
       const { [dateKey]: deleted, ...rest } = entries;
       setEntries(rest);
-      saveEntries(rest);
+      saveEntries(rest); // Local delete
+      deleteEntryFromSupabase(dateKey); // Remote delete
+      
       setEditorContent('');
       setEditorTags([]);
       if (editorRef.current) editorRef.current.innerHTML = '';
@@ -140,6 +181,8 @@ const App: React.FC = () => {
   const removeTag = (tagToRemove: string) => {
     const newTags = editorTags.filter(t => t !== tagToRemove);
     setEditorTags(newTags);
+    // Logic inside handleSave will pick up the tag change via useEffect or manual save
+    // But forcing a save immediately is safer for UI consistency
     const newEntry = {
       ...entries[dateKey],
       id: dateKey,
@@ -151,13 +194,13 @@ const App: React.FC = () => {
     const newEntries = { ...entries, [dateKey]: newEntry };
     setEntries(newEntries);
     saveEntries(newEntries);
+    upsertEntryToSupabase(newEntry);
   };
 
   const updateSetting = (key: keyof AppSettings, value: any) => {
     setSettings(prev => {
       const newSettings = { ...prev, [key]: value };
       
-      // Auto-switch editor text color when toggling theme if it matches defaults
       if (key === 'darkMode') {
         const isDark = value;
         const defaultLightColor = '#111827';
@@ -260,7 +303,7 @@ const App: React.FC = () => {
         {/* Status Bar */}
         <div className="absolute bottom-0 left-0 right-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur text-xs text-textSecondary py-1 px-4 border-t border-borderSoft flex justify-between">
            <span>Words: {editorContent.replace(/<[^>]*>/g, '').split(/\s+/).filter(w => w.length > 0).length}</span>
-           <span>{saving ? 'Saving...' : 'All changes saved locally'}</span>
+           <span>{saving ? 'Syncing...' : 'All changes saved'}</span>
         </div>
       </main>
     </div>
