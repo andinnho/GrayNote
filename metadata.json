@@ -1,0 +1,5 @@
+{
+  "name": "GrayNote",
+  "description": "A minimalist, offline-first digital diary focused on productivity and customizability. Features rich text editing, tagging, and calendar organization.",
+  "requestFramePermissions": []
+}

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GrayNote - Digital Diary</title>
+    <meta name="description" content="A minimalist digital diary app" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#1ABC9C" />
+    
+    <!-- Preconnect to Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    
+    <!-- Fonts: Inter, Roboto, Source Sans 3, Montserrat, Merriweather (Serif), Fira Code (Mono) -->
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code&family=Inter:wght@300;400;500;600;700&family=Merriweather:ital,wght@0,300;0,400;1,300&family=Montserrat:wght@300;400;500;600&family=Roboto:wght@300;400;500;700&family=Source+Sans+3:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      :root {
+        --text-main: #111827;
+        --text-secondary: #6B7280;
+        --bg-main: #F9FAFB;
+        --bg-surface: #FFFFFF;
+        --border-soft: #E5E7EB;
+      }
+      .dark {
+        --text-main: #F3F4F6;
+        --text-secondary: #9CA3AF;
+        --bg-main: #111827;
+        --bg-surface: #1F2937;
+        --border-soft: #374151;
+      }
+      /* Custom Scrollbar for a cleaner look */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
+      .dark ::-webkit-scrollbar-thumb {
+        background: #475569;
+      }
+      /* Editor Content Styles */
+      .editor-content:empty:before {
+        content: attr(placeholder);
+        color: var(--text-secondary);
+        pointer-events: none;
+        display: block; /* For Firefox */
+      }
+    </style>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              primary: '#1ABC9C',
+              secondary: '#2C3E50',
+              accent: '#3498DB',
+              bgMain: 'var(--bg-main)',
+              bgSurface: 'var(--bg-surface)',
+              borderSoft: 'var(--border-soft)',
+              textMain: 'var(--text-main)',
+              textSecondary: 'var(--text-secondary)',
+              highlight: {
+                yellow: '#FEF3C7',
+                green: '#D1FAE5',
+                blue: '#DBEAFE',
+                pink: '#FCE7F3'
+              }
+            },
+            fontFamily: {
+              inter: ['Inter', 'sans-serif'],
+              roboto: ['Roboto', 'sans-serif'],
+              source: ['"Source Sans 3"', 'sans-serif'],
+              montserrat: ['Montserrat', 'sans-serif'],
+              serif: ['Merriweather', 'serif'],
+              mono: ['"Fira Code"', 'monospace'],
+            }
+          }
+        }
+      }
+    </script>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "date-fns": "https://esm.sh/date-fns@^4.1.0",
+    "date-fns/locale": "https://esm.sh/date-fns@^4.1.0/locale",
+    "date-fns/": "https://esm.sh/date-fns@^4.1.0/"
+  }
+}
+</script>
+</head>
+  <body class="bg-bgMain text-textMain transition-colors duration-200 overflow-hidden">
+    <div id="root"></div>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/service-worker.js')
+            .then(reg => console.log('SW registered'))
+            .catch(err => console.log('SW registration failed', err));
+        });
+      }
+    </script>
+  </body>
+</html>
