@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from 'date-fns';
+import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Search, Hash, Calendar as CalendarIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, Hash, Calendar as CalendarIcon, X } from 'lucide-react';
 import { DiaryEntry } from '../types';
 
 interface SidebarProps {
@@ -39,15 +39,47 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const allTags = useMemo(() => {
     const tags = new Set<string>();
     Object.values(entries).forEach((entry) => {
-      // Cast entry to DiaryEntry to avoid type errors with Object.values where it might infer unknown
       (entry as DiaryEntry).tags.forEach(tag => tags.add(tag));
     });
     return Array.from(tags).sort();
   }, [entries]);
 
+  // Search Logic
+  const filteredEntries = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return [];
+
+    return Object.values(entries)
+      .filter((entry) => {
+        const entryData = entry as DiaryEntry;
+        const dateObj = parseISO(entryData.date);
+        const formattedDate = format(dateObj, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }).toLowerCase();
+        const plainText = (entryData.content || '').replace(/<[^>]*>/g, ' ').toLowerCase();
+        
+        // Match content, raw date (2023-10-25), formatted date (25 de outubro), or tags
+        return (
+          plainText.includes(query) ||
+          entryData.date.includes(query) ||
+          formattedDate.includes(query) ||
+          entryData.tags.some(t => t.toLowerCase().includes(query))
+        );
+      })
+      .sort((a, b) => (b as DiaryEntry).date.localeCompare((a as DiaryEntry).date)); // Newest first
+  }, [entries, searchQuery]);
+
   // Calendar render helper
   const hasEntry = (date: Date) => {
-    return !!entries[format(date, 'yyyy-MM-dd')];
+    const dateStr = format(date, 'yyyy-MM-dd');
+    const entry = entries[dateStr];
+    
+    if (!entry) return false;
+    
+    // Filter by tag if selected
+    if (selectedTag) {
+        return (entry as DiaryEntry).tags.includes(selectedTag);
+    }
+    
+    return true;
   };
 
   return (
@@ -84,107 +116,169 @@ export const Sidebar: React.FC<SidebarProps> = ({
             placeholder="Search entries..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-primary focus:outline-none"
+            className="w-full pl-9 pr-8 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-primary focus:outline-none transition-shadow"
           />
           <Search className="absolute left-3 top-2.5 w-4 h-4 text-textSecondary" />
+          {searchQuery && (
+            <button 
+              onClick={() => onSearchChange('')}
+              className="absolute right-2 top-2 p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-textSecondary"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
-        {/* Calendar Widget */}
-        <div className="p-4">
-          <div className="flex items-center justify-between mb-4">
-            <button 
-              onClick={() => setViewDate(subMonths(viewDate, 1))}
-              className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            <span className="font-semibold text-textMain capitalize">
-              {format(viewDate, 'MMMM yyyy', { locale: ptBR })}
-            </span>
-            <button 
-              onClick={() => setViewDate(addMonths(viewDate, 1))}
-              className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </button>
+        
+        {searchQuery.trim() ? (
+          /* Search Results View */
+          <div className="p-4 space-y-3">
+             <div className="text-xs font-semibold text-textSecondary uppercase tracking-wider mb-2">
+               Search Results ({filteredEntries.length})
+             </div>
+             {filteredEntries.length > 0 ? (
+               filteredEntries.map(entry => {
+                  const entryData = entry as DiaryEntry;
+                  const dateObj = parseISO(entryData.date);
+                  return (
+                    <button
+                      key={entryData.id}
+                      onClick={() => {
+                        onDateSelect(dateObj);
+                        if (window.innerWidth < 768) onCloseMobile();
+                      }}
+                      className="w-full text-left p-3 rounded-lg bg-white dark:bg-gray-800 border border-borderSoft hover:border-primary hover:shadow-sm transition-all group"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-semibold text-textMain text-sm capitalize">
+                          {format(dateObj, "d MMM", { locale: ptBR })}
+                        </span>
+                        <span className="text-xs text-textSecondary">
+                           {format(dateObj, "yyyy")}
+                        </span>
+                      </div>
+                      <div className="text-xs text-textSecondary line-clamp-2 h-8 leading-4">
+                        {(entryData.content || '').replace(/<[^>]*>/g, ' ')}
+                      </div>
+                      {entryData.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                           {entryData.tags.slice(0, 3).map(tag => (
+                             <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-textSecondary rounded-full">#{tag}</span>
+                           ))}
+                           {entryData.tags.length > 3 && (
+                             <span className="text-[10px] text-textSecondary">+{entryData.tags.length - 3}</span>
+                           )}
+                        </div>
+                      )}
+                    </button>
+                  );
+               })
+             ) : (
+                <div className="text-center py-10 text-textSecondary flex flex-col items-center">
+                   <Search className="w-8 h-8 mb-2 opacity-20" />
+                   <p className="text-sm">No matches found</p>
+                </div>
+             )}
           </div>
-
-          <div className="grid grid-cols-7 gap-1 text-center text-xs mb-2">
-            {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => (
-              <span key={`${d}-${i}`} className="text-textSecondary font-medium">{d}</span>
-            ))}
-          </div>
-          
-          <div className="grid grid-cols-7 gap-1 text-center">
-            {/* Empty cells for start offset could be added here if we want exact day alignment, strictly not required for MVP but nicer */}
-            {Array(startOfMonth(viewDate).getDay()).fill(null).map((_, i) => <div key={`empty-${i}`} />)}
-            
-            {daysInMonth.map(date => {
-              const isSelected = isSameDay(date, currentDate);
-              const isToday = isSameDay(date, new Date());
-              const entryExists = hasEntry(date);
-
-              return (
-                <button
-                  key={date.toString()}
-                  onClick={() => {
-                    onDateSelect(date);
-                    if (window.innerWidth < 768) onCloseMobile();
-                  }}
-                  className={`
-                    h-8 w-8 rounded-full flex items-center justify-center text-sm transition-all
-                    ${isSelected ? 'bg-primary text-white font-bold shadow-md' : 'hover:bg-gray-200 dark:hover:bg-gray-700'}
-                    ${!isSelected && isToday ? 'text-primary font-bold border border-primary' : ''}
-                    ${!isSelected && !isToday ? 'text-textMain' : ''}
-                  `}
+        ) : (
+          /* Calendar View */
+          <>
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-4">
+                <button 
+                  onClick={() => setViewDate(subMonths(viewDate, 1))}
+                  className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"
                 >
-                  <div className="relative">
-                    {format(date, 'd')}
-                    {entryExists && !isSelected && (
-                      <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-accent rounded-full" />
-                    )}
-                  </div>
+                  <ChevronLeft className="w-5 h-5" />
                 </button>
-              );
-            })}
-          </div>
-        </div>
+                <span className="font-semibold text-textMain capitalize">
+                  {format(viewDate, 'MMMM yyyy', { locale: ptBR })}
+                </span>
+                <button 
+                  onClick={() => setViewDate(addMonths(viewDate, 1))}
+                  className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
 
-        {/* Tag List */}
-        <div className="p-4 border-t border-borderSoft">
-          <h3 className="text-xs font-semibold text-textSecondary uppercase tracking-wider mb-3">Tags</h3>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => onTagSelect(null)}
-              className={`text-xs px-2 py-1 rounded-md border ${
-                selectedTag === null 
-                  ? 'bg-secondary text-white border-secondary' 
-                  : 'bg-white dark:bg-gray-800 text-textSecondary border-gray-200 dark:border-gray-700'
-              }`}
-            >
-              All
-            </button>
-            {allTags.map(tag => (
-              <button
-                key={tag}
-                onClick={() => onTagSelect(tag)}
-                className={`text-xs px-2 py-1 rounded-md border flex items-center gap-1 transition-colors ${
-                  selectedTag === tag 
-                    ? 'bg-accent text-white border-accent' 
-                    : 'bg-white dark:bg-gray-800 text-textMain border-gray-200 dark:border-gray-700 hover:border-accent'
-                }`}
-              >
-                <Hash className="w-3 h-3" />
-                {tag}
-              </button>
-            ))}
-            {allTags.length === 0 && (
-              <p className="text-xs text-textSecondary italic">No tags used yet.</p>
-            )}
-          </div>
-        </div>
+              <div className="grid grid-cols-7 gap-1 text-center text-xs mb-2">
+                {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => (
+                  <span key={`${d}-${i}`} className="text-textSecondary font-medium">{d}</span>
+                ))}
+              </div>
+              
+              <div className="grid grid-cols-7 gap-1 text-center">
+                {Array(startOfMonth(viewDate).getDay()).fill(null).map((_, i) => <div key={`empty-${i}`} />)}
+                
+                {daysInMonth.map(date => {
+                  const isSelected = isSameDay(date, currentDate);
+                  const isToday = isSameDay(date, new Date());
+                  const entryExists = hasEntry(date);
+
+                  return (
+                    <button
+                      key={date.toString()}
+                      onClick={() => {
+                        onDateSelect(date);
+                        if (window.innerWidth < 768) onCloseMobile();
+                      }}
+                      className={`
+                        h-8 w-8 rounded-full flex items-center justify-center text-sm transition-all relative
+                        ${isSelected ? 'bg-primary text-white font-bold shadow-md' : 'hover:bg-gray-200 dark:hover:bg-gray-700'}
+                        ${!isSelected && isToday ? 'text-primary font-bold border border-primary' : ''}
+                        ${!isSelected && !isToday ? 'text-textMain' : ''}
+                      `}
+                    >
+                      <span>{format(date, 'd')}</span>
+                      {entryExists && !isSelected && (
+                        <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-accent rounded-full" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Tag List */}
+            <div className="p-4 border-t border-borderSoft">
+              <h3 className="text-xs font-semibold text-textSecondary uppercase tracking-wider mb-3">
+                {selectedTag ? `Filtered: #${selectedTag}` : 'Tags'}
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => onTagSelect(null)}
+                  className={`text-xs px-2 py-1 rounded-md border ${
+                    selectedTag === null 
+                      ? 'bg-secondary text-white border-secondary' 
+                      : 'bg-white dark:bg-gray-800 text-textSecondary border-gray-200 dark:border-gray-700'
+                  }`}
+                >
+                  All
+                </button>
+                {allTags.map(tag => (
+                  <button
+                    key={tag}
+                    onClick={() => onTagSelect(selectedTag === tag ? null : tag)}
+                    className={`text-xs px-2 py-1 rounded-md border flex items-center gap-1 transition-colors ${
+                      selectedTag === tag 
+                        ? 'bg-accent text-white border-accent' 
+                        : 'bg-white dark:bg-gray-800 text-textMain border-gray-200 dark:border-gray-700 hover:border-accent'
+                    }`}
+                  >
+                    <Hash className="w-3 h-3" />
+                    {tag}
+                  </button>
+                ))}
+                {allTags.length === 0 && (
+                  <p className="text-xs text-textSecondary italic">No tags used yet.</p>
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </aside>
   );
