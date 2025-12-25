@@ -108,6 +108,7 @@
   <body class="bg-bgMain text-textMain transition-colors duration-200 overflow-hidden">
     <div id="root"></div>
     <script>
+      /* Service Worker disabled
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/service-worker.js')
@@ -115,6 +116,7 @@
             .catch(err => console.log('SW registration failed', err));
         });
       }
+      */
     </script>
   </body>
 </html>
