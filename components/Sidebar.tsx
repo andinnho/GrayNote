@@ -38,8 +38,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const allTags = useMemo(() => {
     const tags = new Set<string>();
-    Object.values(entries).forEach(entry => {
-      entry.tags.forEach(tag => tags.add(tag));
+    Object.values(entries).forEach((entry) => {
+      // Cast entry to DiaryEntry to avoid type errors with Object.values where it might infer unknown
+      (entry as DiaryEntry).tags.forEach(tag => tags.add(tag));
     });
     return Array.from(tags).sort();
   }, [entries]);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { format, parseISO } from 'date-fns';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, Plus } from 'lucide-react';
 
 import { DiaryEntry, AppSettings } from './types';
 import { 
@@ -31,6 +31,7 @@ const App: React.FC = () => {
   // Editor State (Local to the day)
   const [editorContent, setEditorContent] = useState('');
   const [editorTags, setEditorTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState(''); // New state for tag input
 
   const editorRef = useRef<HTMLDivElement>(null);
   const dateKey = formatDateForStorage(currentDate);
@@ -101,6 +102,7 @@ const App: React.FC = () => {
         editorRef.current.innerHTML = '';
       }
     }
+    setTagInput(''); // Clear tag input on date change
   }, [dateKey, entries]);
 
   // Save logic
@@ -178,16 +180,48 @@ const App: React.FC = () => {
     }
   };
 
+  // --- TAG MANAGEMENT ---
+
+  const addTag = () => {
+    const trimmedTag = tagInput.trim().toLowerCase();
+    if (trimmedTag && !editorTags.includes(trimmedTag)) {
+      const newTags = [...editorTags, trimmedTag];
+      setEditorTags(newTags);
+      setTagInput('');
+      
+      // Force immediate save for tags
+      const content = editorRef.current?.innerHTML || '';
+      const newEntry = {
+        id: dateKey,
+        date: dateKey,
+        content,
+        tags: newTags,
+        updatedAt: Date.now()
+      };
+      
+      const newEntries = { ...entries, [dateKey]: newEntry };
+      setEntries(newEntries);
+      saveEntries(newEntries);
+      upsertEntryToSupabase(newEntry);
+    }
+  };
+
+  const handleTagInputKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addTag();
+    }
+  };
+
   const removeTag = (tagToRemove: string) => {
     const newTags = editorTags.filter(t => t !== tagToRemove);
     setEditorTags(newTags);
-    // Logic inside handleSave will pick up the tag change via useEffect or manual save
-    // But forcing a save immediately is safer for UI consistency
+    
+    // Force immediate save for tags
+    const content = editorRef.current?.innerHTML || '';
     const newEntry = {
-      ...entries[dateKey],
-      id: dateKey,
-      date: dateKey,
-      content: editorContent,
+      ...entries[dateKey] || { id: dateKey, date: dateKey, content: '', updatedAt: Date.now() },
+      content,
       tags: newTags,
       updatedAt: Date.now()
     };
@@ -279,6 +313,21 @@ const App: React.FC = () => {
               <button onClick={() => removeTag(tag)} className="hover:text-red-500 hidden group-hover:inline ml-1">&times;</button>
             </span>
           ))}
+          
+          <div className="flex items-center gap-1 group">
+            <Plus className="w-4 h-4 text-textSecondary opacity-50 group-hover:opacity-100 transition-opacity" />
+            <input 
+              type="text"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={handleTagInputKeyDown}
+              onBlur={() => {
+                if(tagInput.trim()) addTag();
+              }}
+              placeholder="Add tag"
+              className="bg-transparent text-sm border-b border-transparent focus:border-primary outline-none text-textSecondary placeholder-gray-400 w-24 focus:w-48 transition-all"
+            />
+          </div>
         </div>
 
         {/* Editor Area */}
