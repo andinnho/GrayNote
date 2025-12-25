@@ -1,5 +1,5 @@
 import { DiaryEntry, AppSettings } from '../types';
-import { supabase } from './supabaseClient';
+import { supabase, isSupabaseConfigured } from './supabaseClient';
 
 const STORAGE_KEYS = {
   ENTRIES: 'zenjournal_entries',
@@ -73,7 +73,8 @@ const mapFromSupabase = (data: any[]): Record<string, DiaryEntry> => {
 
 // Sincroniza dados remotos com dados locais (estratégia: o mais recente vence)
 export const fetchAndMergeEntries = async (localEntries: Record<string, DiaryEntry>): Promise<Record<string, DiaryEntry>> => {
-  if (isRemoteSyncDisabled) return localEntries;
+  // Guard Clause: If not configured or disabled, skip remote fetch entirely
+  if (!isSupabaseConfigured() || isRemoteSyncDisabled) return localEntries;
 
   try {
     const { data, error } = await supabase.from('entries').select('*');
@@ -82,17 +83,6 @@ export const fetchAndMergeEntries = async (localEntries: Record<string, DiaryEnt
       // Handle "Table not found" specifically
       if (error.message.includes('Could not find the table') || error.code === '42P01') {
         console.warn('⚠️ SUPABASE SETUP REQUIRED: The table "entries" was not found.');
-        console.warn('To enable sync, run this SQL in your Supabase SQL Editor:');
-        console.warn(`
-          create table entries (
-            id text primary key,
-            date text,
-            content text,
-            tags jsonb,
-            updated_at bigint
-          );
-        `);
-        // Disable further sync attempts to prevent error spam
         isRemoteSyncDisabled = true; 
         return localEntries;
       }
@@ -116,14 +106,17 @@ export const fetchAndMergeEntries = async (localEntries: Record<string, DiaryEnt
 
     return merged;
   } catch (err: any) {
-    console.error('Sync failed:', err?.message || err);
+    // Only log critical errors if we expected it to work
+    if (isSupabaseConfigured()) {
+       console.error('Sync failed:', err?.message || err);
+    }
     return localEntries;
   }
 };
 
 // Salva uma entrada individual no Supabase
 export const upsertEntryToSupabase = async (entry: DiaryEntry) => {
-  if (isRemoteSyncDisabled) return;
+  if (!isSupabaseConfigured() || isRemoteSyncDisabled) return;
 
   try {
     const payload = {
@@ -137,7 +130,6 @@ export const upsertEntryToSupabase = async (entry: DiaryEntry) => {
     const { error } = await supabase.from('entries').upsert(payload);
     if (error) throw error;
   } catch (err: any) {
-    // Silent fail for offline/setup issues, generic log otherwise
     if (!isRemoteSyncDisabled) {
        console.error('Failed to save to Supabase:', err?.message || err);
     }
@@ -145,7 +137,7 @@ export const upsertEntryToSupabase = async (entry: DiaryEntry) => {
 };
 
 export const deleteEntryFromSupabase = async (id: string) => {
-  if (isRemoteSyncDisabled) return;
+  if (!isSupabaseConfigured() || isRemoteSyncDisabled) return;
 
   try {
     const { error } = await supabase.from('entries').delete().match({ id });
