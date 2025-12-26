@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Type, 
   Bold, 
@@ -9,9 +9,11 @@ import {
   Save, 
   Download,
   Moon,
-  Sun
+  Sun,
+  Smile
 } from 'lucide-react';
 import { Button } from './Button';
+import { EmojiPicker } from './EmojiPicker';
 import { AppSettings, FontFamily } from '../types';
 
 interface EditorToolbarProps {
@@ -33,6 +35,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
   onDelete,
   saving
 }) => {
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   
   const fontOptions: { value: FontFamily; label: string }[] = [
     { value: 'inter', label: 'Inter' },
@@ -49,6 +52,11 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
     { value: '#DBEAFE', label: 'Blue', bg: 'bg-blue-100' },
     { value: '#FCE7F3', label: 'Pink', bg: 'bg-pink-100' },
   ];
+
+  const handleEmojiSelect = (emoji: string) => {
+    onFormat('insertText', emoji);
+    setShowEmojiPicker(false);
+  };
 
   return (
     <div className="sticky top-0 z-20 flex flex-col gap-3 px-6 py-4 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-sm border-b border-gray-200 dark:border-gray-800 shadow-sm transition-all">
@@ -91,7 +99,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
       </div>
 
       {/* Bottom Row: Formatting Tools (Grouped in a visual container) */}
-      <div className="flex flex-wrap items-center gap-3 p-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+      <div className="flex flex-wrap items-center gap-3 p-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm relative">
         
         {/* Font Family */}
         <div className="flex items-center gap-2 min-w-fit px-2">
@@ -186,6 +194,26 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                title={`Highlight ${c.label}`}
              />
            ))}
+        </div>
+
+        {/* Separator */}
+        <div className="w-px h-5 bg-gray-200 dark:bg-gray-600" />
+
+        {/* Emoji Picker Trigger */}
+        <div className="relative">
+          <Button 
+            variant={showEmojiPicker ? "secondary" : "ghost"}
+            icon={<Smile className="w-4 h-4 text-yellow-500" />} 
+            onClick={() => setShowEmojiPicker(!showEmojiPicker)} 
+            className="h-8 w-8 px-0"
+            tooltip="Insert Emoji"
+          />
+          {showEmojiPicker && (
+            <EmojiPicker 
+              onSelect={handleEmojiSelect} 
+              onClose={() => setShowEmojiPicker(false)} 
+            />
+          )}
         </div>
 
       </div>

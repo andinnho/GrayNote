@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
-import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from 'date-fns';
+import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Search, Hash, Calendar as CalendarIcon, X, Book, LogOut } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, Calendar as CalendarIcon, X, Book, LogOut } from 'lucide-react';
 import { DiaryEntry } from '../types';
 
 interface SidebarProps {
@@ -10,8 +10,6 @@ interface SidebarProps {
   entries: Record<string, DiaryEntry>;
   searchQuery: string;
   onSearchChange: (query: string) => void;
-  selectedTag: string | null;
-  onTagSelect: (tag: string | null) => void;
   isOpen: boolean;
   onCloseMobile: () => void;
   onLogout?: () => void;
@@ -23,8 +21,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   entries,
   searchQuery,
   onSearchChange,
-  selectedTag,
-  onTagSelect,
   isOpen,
   onCloseMobile,
   onLogout
@@ -38,14 +34,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     });
   }, [viewDate]);
 
-  const allTags = useMemo(() => {
-    const tags = new Set<string>();
-    Object.values(entries).forEach((entry) => {
-      (entry as DiaryEntry).tags.forEach(tag => tags.add(tag));
-    });
-    return Array.from(tags).sort();
-  }, [entries]);
-
   // Search Logic
   const filteredEntries = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -58,12 +46,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
         const formattedDate = format(dateObj, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }).toLowerCase();
         const plainText = (entryData.content || '').replace(/<[^>]*>/g, ' ').toLowerCase();
         
-        // Match content, raw date (2023-10-25), formatted date (25 de outubro), or tags
+        // Match content, raw date (2023-10-25), formatted date (25 de outubro)
         return (
           plainText.includes(query) ||
           entryData.date.includes(query) ||
-          formattedDate.includes(query) ||
-          entryData.tags.some(t => t.toLowerCase().includes(query))
+          formattedDate.includes(query)
         );
       })
       .sort((a, b) => (b as DiaryEntry).date.localeCompare((a as DiaryEntry).date)); // Newest first
@@ -73,15 +60,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const hasEntry = (date: Date) => {
     const dateStr = format(date, 'yyyy-MM-dd');
     const entry = entries[dateStr];
-    
-    if (!entry) return false;
-    
-    // Filter by tag if selected
-    if (selectedTag) {
-        return (entry as DiaryEntry).tags.includes(selectedTag);
-    }
-    
-    return true;
+    return !!entry;
   };
 
   return (
@@ -155,16 +134,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <div className="text-xs text-textSecondary line-clamp-2 h-8 leading-4">
                         {(entryData.content || '').replace(/<[^>]*>/g, ' ')}
                       </div>
-                      {entryData.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                           {entryData.tags.slice(0, 3).map(tag => (
-                             <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-textSecondary rounded-full">#{tag}</span>
-                           ))}
-                           {entryData.tags.length > 3 && (
-                             <span className="text-[10px] text-textSecondary">+{entryData.tags.length - 3}</span>
-                           )}
-                        </div>
-                      )}
                     </button>
                   );
                })
@@ -232,42 +201,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </button>
                   );
                 })}
-              </div>
-            </div>
-
-            {/* Tag List */}
-            <div className="p-4 border-t border-borderSoft">
-              <h3 className="text-xs font-semibold text-textSecondary uppercase tracking-wider mb-3">
-                {selectedTag ? `Filtered: #${selectedTag}` : 'Tags'}
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => onTagSelect(null)}
-                  className={`text-xs px-2 py-1 rounded-md border ${
-                    selectedTag === null 
-                      ? 'bg-secondary text-white border-secondary' 
-                      : 'bg-white dark:bg-gray-800 text-textSecondary border-gray-200 dark:border-gray-700'
-                  }`}
-                >
-                  All
-                </button>
-                {allTags.map(tag => (
-                  <button
-                    key={tag}
-                    onClick={() => onTagSelect(selectedTag === tag ? null : tag)}
-                    className={`text-xs px-2 py-1 rounded-md border flex items-center gap-1 transition-colors ${
-                      selectedTag === tag 
-                        ? 'bg-accent text-white border-accent' 
-                        : 'bg-white dark:bg-gray-800 text-textMain border-gray-200 dark:border-gray-700 hover:border-accent'
-                    }`}
-                  >
-                    <Hash className="w-3 h-3" />
-                    {tag}
-                  </button>
-                ))}
-                {allTags.length === 0 && (
-                  <p className="text-xs text-textSecondary italic">No tags used yet.</p>
-                )}
               </div>
             </div>
           </>

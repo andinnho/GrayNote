@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { format, parseISO } from 'date-fns';
-import { Menu, X, Plus } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 
 import { DiaryEntry, AppSettings } from './types';
@@ -31,15 +31,12 @@ const App: React.FC = () => {
   const [entries, setEntries] = useState<Record<string, DiaryEntry>>({});
   const [settings, setSettings] = useState<AppSettings>(loadSettings());
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   
   // Editor State (Local to the day)
   const [editorContent, setEditorContent] = useState('');
-  const [editorTags, setEditorTags] = useState<string[]>([]);
-  const [tagInput, setTagInput] = useState(''); 
-
+  
   const editorRef = useRef<HTMLDivElement>(null);
   const dateKey = formatDateForStorage(currentDate);
 
@@ -95,7 +92,6 @@ const App: React.FC = () => {
         const updatedCurrentEntry = mergedData[dateKey];
         if (updatedCurrentEntry) {
           setEditorContent(updatedCurrentEntry.content);
-          setEditorTags(updatedCurrentEntry.tags);
           if (editorRef.current) {
             editorRef.current.innerHTML = updatedCurrentEntry.content;
           }
@@ -126,18 +122,15 @@ const App: React.FC = () => {
     const entry = entries[dateKey];
     if (entry) {
       setEditorContent(entry.content);
-      setEditorTags(entry.tags || []);
       if (editorRef.current) {
         editorRef.current.innerHTML = entry.content;
       }
     } else {
       setEditorContent('');
-      setEditorTags([]);
       if (editorRef.current) {
         editorRef.current.innerHTML = '';
       }
     }
-    setTagInput(''); 
   }, [dateKey, entries]);
 
   // Save logic
@@ -149,7 +142,7 @@ const App: React.FC = () => {
       id: dateKey,
       date: dateKey,
       content,
-      tags: editorTags,
+      tags: [],
       updatedAt: Date.now()
     };
 
@@ -168,7 +161,7 @@ const App: React.FC = () => {
       setSaving(false);
     }
     
-  }, [dateKey, entries, editorTags, session]);
+  }, [dateKey, entries, session]);
 
   // Auto-save debounce
   useEffect(() => {
@@ -177,14 +170,13 @@ const App: React.FC = () => {
       const currentHtml = editorRef.current?.innerHTML || '';
       
       const contentChanged = currentHtml !== (currentStored?.content || '');
-      const tagsChanged = JSON.stringify(editorTags) !== JSON.stringify(currentStored?.tags || []);
 
-      if (editorRef.current && (contentChanged || tagsChanged)) {
+      if (editorRef.current && contentChanged) {
         handleSave();
       }
     }, 2000);
     return () => clearTimeout(timer);
-  }, [editorContent, editorTags, handleSave, dateKey, entries]);
+  }, [editorContent, handleSave, dateKey, entries]);
 
   // Editor Handlers
   const handleFormat = (command: string, value?: string) => {
@@ -214,7 +206,6 @@ const App: React.FC = () => {
       }
       
       setEditorContent('');
-      setEditorTags([]);
       if (editorRef.current) editorRef.current.innerHTML = '';
     }
   };
@@ -222,55 +213,6 @@ const App: React.FC = () => {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setEntries({});
-  };
-
-  // --- TAG MANAGEMENT ---
-
-  const addTag = () => {
-    const trimmedTag = tagInput.trim().toLowerCase();
-    if (trimmedTag && !editorTags.includes(trimmedTag)) {
-      const newTags = [...editorTags, trimmedTag];
-      setEditorTags(newTags);
-      setTagInput('');
-      
-      const content = editorRef.current?.innerHTML || '';
-      const newEntry = {
-        id: dateKey,
-        date: dateKey,
-        content,
-        tags: newTags,
-        updatedAt: Date.now()
-      };
-      
-      const newEntries = { ...entries, [dateKey]: newEntry };
-      setEntries(newEntries);
-      saveEntries(newEntries);
-      if (session) upsertEntryToSupabase(newEntry);
-    }
-  };
-
-  const handleTagInputKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      addTag();
-    }
-  };
-
-  const removeTag = (tagToRemove: string) => {
-    const newTags = editorTags.filter(t => t !== tagToRemove);
-    setEditorTags(newTags);
-    
-    const content = editorRef.current?.innerHTML || '';
-    const newEntry = {
-      ...entries[dateKey] || { id: dateKey, date: dateKey, content: '', updatedAt: Date.now() },
-      content,
-      tags: newTags,
-      updatedAt: Date.now()
-    };
-    const newEntries = { ...entries, [dateKey]: newEntry };
-    setEntries(newEntries);
-    saveEntries(newEntries);
-    if (session) upsertEntryToSupabase(newEntry);
   };
 
   const updateSetting = (key: keyof AppSettings, value: any) => {
@@ -333,8 +275,6 @@ const App: React.FC = () => {
         entries={entries}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        selectedTag={selectedTag}
-        onTagSelect={setSelectedTag}
         isOpen={sidebarOpen}
         onCloseMobile={() => setSidebarOpen(false)}
         onLogout={handleLogout}
@@ -355,35 +295,10 @@ const App: React.FC = () => {
         />
 
         {/* Date Header */}
-        <div className="px-8 py-6 pb-2">
+        <div className="px-8 py-6 pb-4">
            <h2 className="text-3xl font-bold text-textMain font-serif capitalize">
              {formatDateForDisplay(dateKey)}
            </h2>
-        </div>
-
-        {/* Tags Input Area */}
-        <div className="px-8 py-2 flex flex-wrap items-center gap-2 mb-4">
-          {editorTags.map(tag => (
-            <span key={tag} className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-gray-700 text-textSecondary rounded text-sm group">
-              #{tag}
-              <button onClick={() => removeTag(tag)} className="hover:text-red-500 hidden group-hover:inline ml-1">&times;</button>
-            </span>
-          ))}
-          
-          <div className="flex items-center gap-1 group">
-            <Plus className="w-4 h-4 text-textSecondary opacity-50 group-hover:opacity-100 transition-opacity" />
-            <input 
-              type="text"
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={handleTagInputKeyDown}
-              onBlur={() => {
-                if(tagInput.trim()) addTag();
-              }}
-              placeholder="Add tag"
-              className="bg-transparent text-sm border-b border-transparent focus:border-primary outline-none text-textSecondary placeholder-gray-400 w-24 focus:w-48 transition-all"
-            />
-          </div>
         </div>
 
         {/* Editor Area */}
