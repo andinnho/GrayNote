@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Search, Hash, Calendar as CalendarIcon, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, Hash, Calendar as CalendarIcon, X, Book } from 'lucide-react';
 import { DiaryEntry } from '../types';
 
 interface SidebarProps {
@@ -92,20 +92,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     >
       {/* Search Area */}
       <div className="p-4 border-b border-borderSoft flex flex-col gap-4">
-        <div className="flex justify-center py-2">
-            <img 
-              src="/logo.png" 
-              alt="GrayNote" 
-              className="h-32 w-auto object-contain transition-all duration-300 dark:filter dark:invert dark:hue-rotate-180"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-                // Show fallback text if image fails
-                const fallback = document.getElementById('logo-fallback');
-                if (fallback) fallback.classList.remove('hidden');
-              }}
-            />
-            <h1 id="logo-fallback" className="text-xl font-bold text-primary flex items-center gap-2 hidden">
-              <CalendarIcon className="w-6 h-6" />
+        <div className="flex items-center justify-center gap-3 py-2">
+            <div className="p-1.5 bg-primary/10 rounded-lg">
+              <Book className="w-6 h-6 text-primary" strokeWidth={2.5} />
+            </div>
+            <h1 className="text-xl font-bold text-primary font-serif tracking-tight">
               GrayNote
             </h1>
         </div>
