@@ -51,7 +51,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
   ];
 
   return (
-    <div className="sticky top-0 z-20 flex flex-col gap-2 p-3 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md border-b border-borderSoft transition-colors">
+    <div className="sticky top-0 z-20 flex flex-col gap-3 px-6 py-4 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-sm border-b border-gray-200 dark:border-gray-800 shadow-sm transition-all">
       
       {/* Top Row: Main Actions */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -62,7 +62,9 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
             icon={<Save />} 
             onClick={onSave}
             disabled={saving}
+            className="shadow-sm"
           />
+          <div className="h-6 w-px bg-gray-300 dark:bg-gray-700 mx-1" />
           <Button 
             variant="secondary" 
             icon={<Download />} 
@@ -71,7 +73,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           />
           <Button 
             variant="ghost" 
-            className="text-red-500 hover:bg-red-50 hover:text-red-600"
+            className="text-red-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
             icon={<Trash2 />} 
             onClick={onDelete} 
             tooltip="Clear Entry" 
@@ -88,16 +90,16 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
         </div>
       </div>
 
-      {/* Bottom Row: Formatting & Typography */}
-      <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-borderSoft overflow-x-auto pb-1">
+      {/* Bottom Row: Formatting Tools (Grouped in a visual container) */}
+      <div className="flex flex-wrap items-center gap-3 p-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
         
         {/* Font Family */}
-        <div className="flex items-center gap-2 min-w-fit">
+        <div className="flex items-center gap-2 min-w-fit px-2">
           <Type className="w-4 h-4 text-textSecondary" />
           <select 
             value={settings.editorFont}
             onChange={(e) => onSettingChange('editorFont', e.target.value)}
-            className="h-9 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm px-2 text-textMain focus:ring-2 focus:ring-primary focus:outline-none"
+            className="h-8 rounded-md border-none bg-transparent text-sm text-textMain focus:ring-0 focus:outline-none font-medium cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 px-2 transition-colors"
           >
             {fontOptions.map(font => (
               <option key={font.value} value={font.value}>{font.label}</option>
@@ -106,77 +108,80 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
         </div>
 
         {/* Separator */}
-        <div className="w-px h-6 bg-gray-300 dark:bg-gray-700" />
+        <div className="w-px h-5 bg-gray-200 dark:bg-gray-600" />
 
         {/* Font Size */}
-        <div className="flex items-center gap-2 min-w-fit">
+        <div className="flex items-center gap-2 min-w-fit px-2">
           <span className="text-xs text-textSecondary font-mono w-4">{settings.editorFontSize}</span>
           <input 
             type="range" 
-            min="10" 
-            max="74" 
+            min="12" 
+            max="48" 
             value={settings.editorFontSize}
             onChange={(e) => onSettingChange('editorFontSize', Number(e.target.value))}
-            className="w-24 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-primary"
+            className="w-24 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-600 accent-primary"
           />
         </div>
 
         {/* Separator */}
-        <div className="w-px h-6 bg-gray-300 dark:bg-gray-700" />
+        <div className="w-px h-5 bg-gray-200 dark:bg-gray-600" />
 
         {/* Color Picker */}
-        <div className="flex items-center gap-2 relative group min-w-fit">
-          <label htmlFor="color-picker" className="cursor-pointer flex items-center gap-1 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+        <div className="flex items-center gap-2 relative group min-w-fit px-1">
+          <label htmlFor="color-picker" className="cursor-pointer flex items-center gap-2 px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors">
             <div 
-              className="w-5 h-5 rounded border border-gray-300 shadow-sm"
+              className="w-4 h-4 rounded-full border border-gray-300 shadow-sm ring-1 ring-white dark:ring-gray-700"
               style={{ backgroundColor: settings.editorColor }}
             />
-            <span className="text-xs text-textSecondary">Color</span>
+            <span className="text-xs text-textSecondary font-medium">Color</span>
           </label>
           <input 
             id="color-picker"
             type="color" 
             value={settings.editorColor}
             onChange={(e) => onSettingChange('editorColor', e.target.value)}
-            className="absolute opacity-0 w-8 h-8 pointer-events-none"
+            className="absolute opacity-0 w-full h-full cursor-pointer top-0 left-0"
           />
         </div>
 
         {/* Separator */}
-        <div className="w-px h-6 bg-gray-300 dark:bg-gray-700" />
+        <div className="w-px h-5 bg-gray-200 dark:bg-gray-600" />
 
         {/* Basic Formatting */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           <Button 
             variant="ghost" 
-            icon={<Bold />} 
+            icon={<Bold className="w-4 h-4" />} 
             onClick={() => onFormat('bold')} 
-            className="px-2"
+            className="h-8 w-8 px-0"
             tooltip="Bold"
           />
           <Button 
             variant="ghost" 
-            icon={<Italic />} 
+            icon={<Italic className="w-4 h-4" />} 
             onClick={() => onFormat('italic')} 
-            className="px-2"
+            className="h-8 w-8 px-0"
             tooltip="Italic"
           />
           <Button 
             variant="ghost" 
-            icon={<Underline />} 
+            icon={<Underline className="w-4 h-4" />} 
             onClick={() => onFormat('underline')} 
-            className="px-2"
+            className="h-8 w-8 px-0"
             tooltip="Underline"
           />
         </div>
 
+        {/* Separator */}
+        <div className="w-px h-5 bg-gray-200 dark:bg-gray-600" />
+
         {/* Highlighting */}
-        <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
-           <Highlighter className="w-4 h-4 text-textSecondary ml-2 mr-1" />
+        <div className="flex items-center gap-1.5 px-2">
+           <Highlighter className="w-3.5 h-3.5 text-textSecondary mr-1" />
            {highlightColors.map((c) => (
              <button
                key={c.value}
-               className={`w-5 h-5 rounded-full ${c.bg} hover:scale-110 transition-transform border border-black/10`}
+               className={`w-4 h-4 rounded-full ${c.bg} hover:scale-125 transition-transform border border-black/5 ring-1 ring-transparent hover:ring-gray-300`}
                onClick={() => onFormat('hiliteColor', c.value)}
                title={`Highlight ${c.label}`}
              />
