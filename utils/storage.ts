@@ -80,9 +80,9 @@ export const fetchAndMergeEntries = async (localEntries: Record<string, DiaryEnt
     const { data, error } = await supabase.from('entries').select('*');
     
     if (error) {
-      // Handle "Table not found" specifically
+      // Handle "Table not found" specifically to stop further attempts
       if (error.message.includes('Could not find the table') || error.code === '42P01') {
-        console.warn('⚠️ SUPABASE SETUP REQUIRED: The table "entries" was not found.');
+        console.warn('⚠️ SUPABASE SETUP REQUIRED: The table "entries" was not found. Disabling sync.');
         isRemoteSyncDisabled = true; 
         return localEntries;
       }

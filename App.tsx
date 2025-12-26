@@ -337,7 +337,7 @@ const App: React.FC = () => {
             contentEditable
             suppressContentEditableWarning
             className={`
-              w-full min-h-[60vh] outline-none max-w-4xl mx-auto editor-content
+              w-full min-h-[60vh] outline-none max-w-4xl text-left editor-content
               ${fontClass}
             `}
             style={{ 
