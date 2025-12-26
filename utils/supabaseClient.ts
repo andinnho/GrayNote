@@ -13,3 +13,6 @@ export const supabase = createClient(
   SUPABASE_URL, 
   SUPABASE_KEY
 );
+
+// Explicitly re-export helper if needed, though usually direct import from package is fine.
+export { type Session } from '@supabase/supabase-js';

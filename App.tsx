@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { format, parseISO } from 'date-fns';
 import { Menu, X, Plus } from 'lucide-react';
+import { Session } from '@supabase/supabase-js';
 
 import { DiaryEntry, AppSettings } from './types';
 import { 
@@ -10,16 +11,22 @@ import {
   saveSettings, 
   fetchAndMergeEntries, 
   upsertEntryToSupabase, 
-  deleteEntryFromSupabase 
+  deleteEntryFromSupabase
 } from './utils/storage';
+import { supabase } from './utils/supabaseClient';
 import { formatDateForStorage, formatDateForDisplay } from './utils/dateUtils';
 
 import { Sidebar } from './components/Sidebar';
 import { EditorToolbar } from './components/EditorToolbar';
 import { Button } from './components/Button';
+import { Auth } from './components/Auth';
 
 const App: React.FC = () => {
-  // State
+  // Auth State
+  const [session, setSession] = useState<Session | null>(null);
+  const [loadingSession, setLoadingSession] = useState(true);
+
+  // App State
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [entries, setEntries] = useState<Record<string, DiaryEntry>>({});
   const [settings, setSettings] = useState<AppSettings>(loadSettings());
@@ -31,29 +38,60 @@ const App: React.FC = () => {
   // Editor State (Local to the day)
   const [editorContent, setEditorContent] = useState('');
   const [editorTags, setEditorTags] = useState<string[]>([]);
-  const [tagInput, setTagInput] = useState(''); // New state for tag input
+  const [tagInput, setTagInput] = useState(''); 
 
   const editorRef = useRef<HTMLDivElement>(null);
   const dateKey = formatDateForStorage(currentDate);
 
-  // Initialize
+  // --- Auth & Init Effect ---
   useEffect(() => {
-    // Ensure contentEditable uses <div> for new lines instead of <p> or <br>
-    // This helps maintain clean HTML structure
+    // Check active session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoadingSession(false);
+    });
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (!session) {
+        // Clear local sensitive data on logout if desired, 
+        // strictly speaking localEntries might still be there from localStorage
+        // but for safety in shared environments:
+        setEntries({}); 
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // --- Data Loading Effect (Dependent on Session) ---
+  useEffect(() => {
+    if (!session) return;
+
+    // Apply theme
+    if (settings.darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+
+    // Ensure contentEditable uses <div>
     document.execCommand('defaultParagraphSeparator', false, 'div');
 
-    // 1. Load Local first for instant UI
+    // 1. Load Local first
     const localData = loadEntries();
     setEntries(localData);
     
-    // 2. Fetch Remote and Merge
+    // 2. Fetch Remote and Merge (Only if logged in)
     fetchAndMergeEntries(localData).then(mergedData => {
-      // Only update if there are changes to avoid unnecessary re-renders or loops
       if (JSON.stringify(mergedData) !== JSON.stringify(localData)) {
         setEntries(mergedData);
-        saveEntries(mergedData); // Update local cache
+        saveEntries(mergedData);
         
-        // Refresh editor content if the current day was updated
+        // Refresh editor if needed
         const updatedCurrentEntry = mergedData[dateKey];
         if (updatedCurrentEntry) {
           setEditorContent(updatedCurrentEntry.content);
@@ -64,13 +102,6 @@ const App: React.FC = () => {
         }
       }
     });
-    
-    // Apply theme on load
-    if (settings.darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
 
     // Auto-fix contrast
     const defaultLightColor = '#111827';
@@ -78,7 +109,7 @@ const App: React.FC = () => {
     if (settings.darkMode && settings.editorColor === defaultLightColor) {
       setSettings(prev => ({ ...prev, editorColor: defaultDarkColor }));
     }
-  }, []);
+  }, [session]); // Re-run when session changes
 
   // Update theme when settings change
   useEffect(() => {
@@ -106,13 +137,12 @@ const App: React.FC = () => {
         editorRef.current.innerHTML = '';
       }
     }
-    setTagInput(''); // Clear tag input on date change
+    setTagInput(''); 
   }, [dateKey, entries]);
 
   // Save logic
   const handleSave = useCallback(() => {
     setSaving(true);
-    // Sanitize content
     const content = editorRef.current?.innerHTML || '';
     
     const newEntry: DiaryEntry = {
@@ -125,21 +155,24 @@ const App: React.FC = () => {
 
     const newEntries = { ...entries, [dateKey]: newEntry };
     setEntries(newEntries);
-    saveEntries(newEntries); // Local Save
+    saveEntries(newEntries); 
     
-    // Remote Save (Fire and forget, but handle error in console)
-    upsertEntryToSupabase(newEntry).then(() => {
-        setSaving(false);
-    }).catch(() => {
-        setSaving(false);
-    });
+    // Remote Save
+    if (session) {
+      upsertEntryToSupabase(newEntry).then(() => {
+          setSaving(false);
+      }).catch(() => {
+          setSaving(false);
+      });
+    } else {
+      setSaving(false);
+    }
     
-  }, [dateKey, entries, editorTags]);
+  }, [dateKey, entries, editorTags, session]);
 
   // Auto-save debounce
   useEffect(() => {
     const timer = setTimeout(() => {
-      // Check if content actually changed to avoid spamming DB
       const currentStored = entries[dateKey];
       const currentHtml = editorRef.current?.innerHTML || '';
       
@@ -175,13 +208,20 @@ const App: React.FC = () => {
     if (window.confirm('Are you sure you want to clear this entry?')) {
       const { [dateKey]: deleted, ...rest } = entries;
       setEntries(rest);
-      saveEntries(rest); // Local delete
-      deleteEntryFromSupabase(dateKey); // Remote delete
+      saveEntries(rest); 
+      if (session) {
+        deleteEntryFromSupabase(dateKey); 
+      }
       
       setEditorContent('');
       setEditorTags([]);
       if (editorRef.current) editorRef.current.innerHTML = '';
     }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setEntries({});
   };
 
   // --- TAG MANAGEMENT ---
@@ -193,7 +233,6 @@ const App: React.FC = () => {
       setEditorTags(newTags);
       setTagInput('');
       
-      // Force immediate save for tags
       const content = editorRef.current?.innerHTML || '';
       const newEntry = {
         id: dateKey,
@@ -206,7 +245,7 @@ const App: React.FC = () => {
       const newEntries = { ...entries, [dateKey]: newEntry };
       setEntries(newEntries);
       saveEntries(newEntries);
-      upsertEntryToSupabase(newEntry);
+      if (session) upsertEntryToSupabase(newEntry);
     }
   };
 
@@ -221,7 +260,6 @@ const App: React.FC = () => {
     const newTags = editorTags.filter(t => t !== tagToRemove);
     setEditorTags(newTags);
     
-    // Force immediate save for tags
     const content = editorRef.current?.innerHTML || '';
     const newEntry = {
       ...entries[dateKey] || { id: dateKey, date: dateKey, content: '', updatedAt: Date.now() },
@@ -232,7 +270,7 @@ const App: React.FC = () => {
     const newEntries = { ...entries, [dateKey]: newEntry };
     setEntries(newEntries);
     saveEntries(newEntries);
-    upsertEntryToSupabase(newEntry);
+    if (session) upsertEntryToSupabase(newEntry);
   };
 
   const updateSetting = (key: keyof AppSettings, value: any) => {
@@ -254,7 +292,6 @@ const App: React.FC = () => {
     });
   };
 
-  // Font Classes mapping
   const fontClass = {
     'inter': 'font-inter',
     'roboto': 'font-roboto',
@@ -263,6 +300,20 @@ const App: React.FC = () => {
     'serif': 'font-serif',
     'mono': 'font-mono'
   }[settings.editorFont];
+
+  // --- RENDER ---
+
+  if (loadingSession) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-bgMain">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <Auth />;
+  }
 
   return (
     <div className="flex h-screen bg-bgMain overflow-hidden">
@@ -286,6 +337,7 @@ const App: React.FC = () => {
         onTagSelect={setSelectedTag}
         isOpen={sidebarOpen}
         onCloseMobile={() => setSidebarOpen(false)}
+        onLogout={handleLogout}
       />
 
       {/* Main Content */}

@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Search, Hash, Calendar as CalendarIcon, X, Book } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, Hash, Calendar as CalendarIcon, X, Book, LogOut } from 'lucide-react';
 import { DiaryEntry } from '../types';
 
 interface SidebarProps {
@@ -14,6 +14,7 @@ interface SidebarProps {
   onTagSelect: (tag: string | null) => void;
   isOpen: boolean;
   onCloseMobile: () => void;
+  onLogout?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -25,7 +26,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   selectedTag,
   onTagSelect,
   isOpen,
-  onCloseMobile
+  onCloseMobile,
+  onLogout
 }) => {
   const [viewDate, setViewDate] = React.useState(new Date());
 
@@ -271,6 +273,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </>
         )}
       </div>
+
+      {onLogout && (
+        <div className="p-4 border-t border-borderSoft">
+          <button
+            onClick={onLogout}
+            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            Sign Out
+          </button>
+        </div>
+      )}
     </aside>
   );
 };
