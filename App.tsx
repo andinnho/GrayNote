@@ -9,7 +9,7 @@ import {
   loadSettings, 
   saveSettings, 
   fetchAndMergeEntries, 
-  upsertEntryToSupabase,
+  upsertEntryToSupabase, 
   deleteEntryFromSupabase 
 } from './utils/storage';
 import { formatDateForStorage, formatDateForDisplay } from './utils/dateUtils';
@@ -38,6 +38,10 @@ const App: React.FC = () => {
 
   // Initialize
   useEffect(() => {
+    // Ensure contentEditable uses <div> for new lines instead of <p> or <br>
+    // This helps maintain clean HTML structure
+    document.execCommand('defaultParagraphSeparator', false, 'div');
+
     // 1. Load Local first for instant UI
     const localData = loadEntries();
     setEntries(localData);
