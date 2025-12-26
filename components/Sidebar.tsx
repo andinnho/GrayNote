@@ -3,6 +3,7 @@ import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameDa
 import { ptBR } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Search, X, LogOut } from 'lucide-react';
 import { DiaryEntry } from '../types';
+import { Logo } from './Logo';
 
 interface SidebarProps {
   currentDate: Date;
@@ -74,11 +75,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Search Area */}
       <div className="p-4 border-b border-borderSoft flex flex-col gap-4">
         <div className="flex items-center justify-center gap-3 py-2">
-            <img 
-              src="/logo.png" 
-              alt="GrayNote Logo" 
-              className="w-10 h-10 object-contain"
-            />
+            <Logo className="w-10 h-10 text-primary" />
             <h1 className="text-xl font-bold text-primary font-serif tracking-tight">
               GrayNote
             </h1>

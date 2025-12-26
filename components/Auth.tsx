@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { supabase } from '../utils/supabaseClient';
 import { Mail, Lock, Eye, EyeOff, Loader, AlertCircle } from 'lucide-react';
 import { Button } from './Button';
+import { Logo } from './Logo';
 
 export const Auth: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -47,11 +48,7 @@ export const Auth: React.FC = () => {
         {/* Header */}
         <div className="bg-gray-50 dark:bg-gray-900/50 px-8 py-6 border-b border-gray-100 dark:border-gray-700 flex flex-col items-center">
            <div className="mb-3">
-              <img 
-                  src="/logo.png" 
-                  alt="GrayNote Logo" 
-                  className="w-16 h-16 object-contain" 
-              />
+             <Logo className="w-16 h-16 text-primary" />
            </div>
            <h1 className="text-2xl font-bold text-textMain font-serif">GrayNote</h1>
            <p className="text-sm text-textSecondary mt-1">
