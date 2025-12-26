@@ -10,7 +10,8 @@ import {
   Download,
   Moon,
   Sun,
-  Smile
+  Smile,
+  ChevronDown
 } from 'lucide-react';
 import { Button } from './Button';
 import { EmojiPicker } from './EmojiPicker';
@@ -45,6 +46,8 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
     { value: 'serif', label: 'Serif' },
     { value: 'mono', label: 'Monospace' },
   ];
+
+  const fontSizes = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 30, 36, 48, 60, 72];
 
   const highlightColors = [
     { value: '#FEF3C7', label: 'Yellow', bg: 'bg-yellow-100' },
@@ -102,33 +105,36 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
       <div className="flex flex-wrap items-center gap-3 p-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm relative">
         
         {/* Font Family */}
-        <div className="flex items-center gap-2 min-w-fit px-2">
-          <Type className="w-4 h-4 text-textSecondary" />
+        <div className="flex items-center gap-1 min-w-fit px-2 group relative">
+          <Type className="w-4 h-4 text-textSecondary absolute left-2 pointer-events-none" />
           <select 
             value={settings.editorFont}
             onChange={(e) => onSettingChange('editorFont', e.target.value)}
-            className="h-8 rounded-md border-none bg-transparent text-sm text-textMain focus:ring-0 focus:outline-none font-medium cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 px-2 transition-colors"
+            className="h-8 pl-8 pr-2 rounded-md border border-transparent hover:border-gray-200 dark:hover:border-gray-600 bg-transparent text-sm text-textMain focus:ring-2 focus:ring-primary/20 focus:outline-none font-medium cursor-pointer transition-all appearance-none min-w-[120px]"
           >
             {fontOptions.map(font => (
               <option key={font.value} value={font.value}>{font.label}</option>
             ))}
           </select>
+          <ChevronDown className="w-3 h-3 text-textSecondary absolute right-2 pointer-events-none opacity-50" />
         </div>
 
         {/* Separator */}
         <div className="w-px h-5 bg-gray-200 dark:bg-gray-600" />
 
-        {/* Font Size */}
-        <div className="flex items-center gap-2 min-w-fit px-2">
-          <span className="text-xs text-textSecondary font-mono w-4">{settings.editorFontSize}</span>
-          <input 
-            type="range" 
-            min="12" 
-            max="48" 
+        {/* Font Size Selector (New) */}
+        <div className="flex items-center gap-1 min-w-fit px-1 relative">
+          <select 
             value={settings.editorFontSize}
             onChange={(e) => onSettingChange('editorFontSize', Number(e.target.value))}
-            className="w-24 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-600 accent-primary"
-          />
+            className="h-8 w-16 pl-3 pr-1 rounded-md border border-transparent hover:border-gray-200 dark:hover:border-gray-600 bg-transparent text-sm text-textMain focus:ring-2 focus:ring-primary/20 focus:outline-none font-medium cursor-pointer transition-all appearance-none text-center"
+            title="Font Size"
+          >
+            {fontSizes.map(size => (
+              <option key={size} value={size}>{size}</option>
+            ))}
+          </select>
+          <ChevronDown className="w-3 h-3 text-textSecondary absolute right-2 pointer-events-none opacity-50" />
         </div>
 
         {/* Separator */}
@@ -141,7 +147,6 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
               className="w-4 h-4 rounded-full border border-gray-300 shadow-sm ring-1 ring-white dark:ring-gray-700"
               style={{ backgroundColor: settings.editorColor }}
             />
-            <span className="text-xs text-textSecondary font-medium">Color</span>
           </label>
           <input 
             id="color-picker"
@@ -149,6 +154,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
             value={settings.editorColor}
             onChange={(e) => onSettingChange('editorColor', e.target.value)}
             className="absolute opacity-0 w-full h-full cursor-pointer top-0 left-0"
+            title="Text Color"
           />
         </div>
 
