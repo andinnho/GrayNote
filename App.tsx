@@ -221,18 +221,17 @@ const App: React.FC = () => {
     // 1. ISOLATION: Check if we have a text selection or just a cursor
     if (!selection.isCollapsed) {
       // === HAS SELECTION ===
-      // Apply ONLY to selection. DO NOT update global default settings.
       
-      // Technique: Use fontName as a temporary marker (works across block boundaries), 
-      // then replace with span style. This mimics execCommand behavior without the buggy fontSize command.
+      // Technique: Use fontName as a temporary marker
       const tempFontName = "GrayNoteTempFont_" + Date.now();
       
+      // We must toggle styleWithCSS to ensure fontName uses <font face> or span based on browser,
+      // but execCommand fontName usually produces <font face="...">
       document.execCommand('styleWithCSS', false, 'true');
       document.execCommand('fontName', false, tempFontName);
       document.execCommand('styleWithCSS', false, 'false');
 
       // Find all elements with this font family
-      // Note: We search specifically within the editor to be safe
       const fontElements = editorRef.current.querySelectorAll(`font[face="${tempFontName}"], span[style*="${tempFontName}"]`);
       
       fontElements.forEach(elem => {
@@ -240,9 +239,30 @@ const App: React.FC = () => {
         const span = document.createElement('span');
         span.style.fontSize = `${size}px`;
         
-        // Move all children to the new span
+        // Helper to recursively remove existing font-size styles from children
+        // This prevents nesting issues where an inner span overrides our new outer span
+        const cleanChildren = (node: Node) => {
+           if (node.nodeType === 1) { // Element
+              const el = node as HTMLElement;
+              // Clear inline font-size
+              if (el.style.fontSize) {
+                 el.style.fontSize = '';
+                 if (el.getAttribute('style') === '') el.removeAttribute('style');
+              }
+              // Clear font tag size attribute (deprecated but possible)
+              if (el.tagName === 'FONT' && el.hasAttribute('size')) {
+                 el.removeAttribute('size');
+              }
+              // Recursively clean children
+              Array.from(el.childNodes).forEach(child => cleanChildren(child));
+           }
+        };
+
+        // Move all children to the new span, cleaning them as we go
         while (elem.firstChild) {
-          span.appendChild(elem.firstChild);
+          const child = elem.firstChild;
+          cleanChildren(child);
+          span.appendChild(child);
         }
         
         // Replace the temporary marker with our clean span
@@ -262,10 +282,18 @@ const App: React.FC = () => {
 
       // Insert a zero-width space span so typing happens inside it immediately
       const range = selection.getRangeAt(0);
+      
+      // Check if we are already inside a span we can just update?
+      // For simplicity and robustness, we insert a new zero-width container
       const span = document.createElement('span');
       span.style.fontSize = `${size}px`;
       span.innerHTML = '&#8203;'; // Zero width space
       
+      // If we are just clicking and changing, we insert this marker.
+      // NOTE: This might accumulate empty spans if user changes multiple times without typing.
+      // But browsers usually clean up empty spans.
+      
+      range.deleteContents();
       range.insertNode(span);
       
       // Move cursor inside the span, after the zero-width space
