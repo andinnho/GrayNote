@@ -171,64 +171,113 @@ const App: React.FC = () => {
 
   const checkSelectionStyle = () => {
     const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) return;
+    
+    // Safety check: is selection inside editor?
+    if (!selection || selection.rangeCount === 0 || !editorRef.current) {
+      setSelectionFontSize(null);
+      return;
+    }
 
-    const anchorNode = selection.anchorNode;
-    if (anchorNode && anchorNode.parentElement) {
-      // Check if we are inside the editor
-      if (editorRef.current && (editorRef.current.contains(anchorNode) || editorRef.current === anchorNode)) {
-        const computed = window.getComputedStyle(anchorNode.nodeType === 1 ? anchorNode as Element : anchorNode.parentElement);
-        const fontSizePx = computed.fontSize;
-        const size = parseInt(fontSizePx);
-        if (!isNaN(size)) {
-          setSelectionFontSize(size);
-        }
+    let anchorNode = selection.anchorNode;
+    
+    // Traverse up to find if we are inside editor
+    let currentNode: Node | null = anchorNode;
+    let isInsideEditor = false;
+    while (currentNode) {
+      if (currentNode === editorRef.current) {
+        isInsideEditor = true;
+        break;
       }
+      currentNode = currentNode.parentNode;
+    }
+
+    if (!isInsideEditor) {
+      // Don't clear here, just ignore
+      return;
+    }
+
+    if (anchorNode) {
+       // If text node, get parent
+       const element = anchorNode.nodeType === 3 ? anchorNode.parentElement : anchorNode as HTMLElement;
+       
+       if (element) {
+         const computed = window.getComputedStyle(element);
+         const fontSizePx = computed.fontSize; // returns "16px"
+         // Parse absolute value
+         const size = Math.round(parseFloat(fontSizePx)); 
+         
+         if (!isNaN(size)) {
+           // Only update selection state if it's different to avoid loops
+           setSelectionFontSize(size);
+         }
+       }
     }
   };
 
   const applyFontSize = (size: number) => {
     const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) return;
+    if (!selection || selection.rangeCount === 0 || !editorRef.current) return;
 
+    // 1. ISOLATION: Check if we have a text selection or just a cursor
     if (!selection.isCollapsed) {
-      // Apply to selection using the "font size 7" hook method
-      // This is a robust way to apply inline styles in contentEditable without external libraries
+      // === HAS SELECTION ===
+      // Apply ONLY to selection. DO NOT update global default settings.
+      
+      // Technique: Use fontName as a temporary marker (works across block boundaries), 
+      // then replace with span style. This mimics execCommand behavior without the buggy fontSize command.
+      const tempFontName = "GrayNoteTempFont_" + Date.now();
+      
       document.execCommand('styleWithCSS', false, 'true');
-      document.execCommand('fontSize', false, '7');
-
-      const fontElements = document.getElementsByTagName("font");
-      // Iterate backwards to avoid index issues during replacement
-      for (let i = fontElements.length - 1; i >= 0; i--) {
-        const font = fontElements[i];
-        if (font.size === "7") {
-          const span = document.createElement("span");
-          span.style.fontSize = `${size}px`;
-          
-          // Move children to span
-          while (font.firstChild) {
-            span.appendChild(font.firstChild);
-          }
-          
-          if (font.parentNode) {
-            font.parentNode.replaceChild(span, font);
-          }
-        }
-      }
+      document.execCommand('fontName', false, tempFontName);
       document.execCommand('styleWithCSS', false, 'false');
+
+      // Find all elements with this font family
+      // Note: We search specifically within the editor to be safe
+      const fontElements = editorRef.current.querySelectorAll(`font[face="${tempFontName}"], span[style*="${tempFontName}"]`);
+      
+      fontElements.forEach(elem => {
+        // Create the clean span
+        const span = document.createElement('span');
+        span.style.fontSize = `${size}px`;
+        
+        // Move all children to the new span
+        while (elem.firstChild) {
+          span.appendChild(elem.firstChild);
+        }
+        
+        // Replace the temporary marker with our clean span
+        if (elem.parentNode) {
+          elem.parentNode.replaceChild(span, elem);
+        }
+      });
+      
+      // Update UI to reflect the change on the selection immediately
+      setSelectionFontSize(size);
+
     } else {
-      // No selection: User is setting the "default" for next typing or global
-      // We update the global setting so it persists as preference.
-      // Note: Typing immediately after this might rely on browser default unless we inject span,
-      // but this satisfies the requirement of not changing existing text.
+      // === NO SELECTION (CURSOR ONLY) ===
+      // Update global setting for future typing
+      updateSetting('editorFontSize', size);
+      setSelectionFontSize(size);
+
+      // Insert a zero-width space span so typing happens inside it immediately
+      const range = selection.getRangeAt(0);
+      const span = document.createElement('span');
+      span.style.fontSize = `${size}px`;
+      span.innerHTML = '&#8203;'; // Zero width space
+      
+      range.insertNode(span);
+      
+      // Move cursor inside the span, after the zero-width space
+      range.setStart(span.childNodes[0], 1);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
     }
     
-    setSelectionFontSize(size);
-    updateSetting('editorFontSize', size);
-    
-    // Trigger update
-    setEditorContent(editorRef.current?.innerHTML || '');
-    editorRef.current?.focus();
+    // Trigger content update
+    setEditorContent(editorRef.current.innerHTML);
+    editorRef.current.focus();
   };
 
   const handleFormat = (command: string, value?: string) => {
@@ -237,8 +286,8 @@ const App: React.FC = () => {
     } else {
       document.execCommand(command, false, value);
       editorRef.current?.focus();
-      setEditorContent(editorRef.current?.innerHTML || '');
       checkSelectionStyle();
+      setEditorContent(editorRef.current?.innerHTML || '');
     }
   };
 
@@ -369,8 +418,7 @@ const App: React.FC = () => {
               w-full min-h-[60vh] outline-none max-w-4xl text-left editor-content
               ${fontClass}
             `}
-            // Important: We removed fontSize from here to allow inline styles to take precedence correctly
-            // and to prevent changing the entire document when changing the dropdown.
+            // Important: We REMOVE fontSize from here to avoid global override on selection
             style={{ 
               color: settings.editorColor,
               lineHeight: '1.6'
@@ -382,6 +430,7 @@ const App: React.FC = () => {
             onMouseUp={checkSelectionStyle}
             onKeyUp={checkSelectionStyle}
             onClick={checkSelectionStyle}
+            onBlur={checkSelectionStyle}
           />
         </div>
 
