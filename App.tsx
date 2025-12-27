@@ -34,29 +34,25 @@ const App: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   
-  // Editor State (Local to the day)
+  // Editor State
   const [editorContent, setEditorContent] = useState('');
+  const [selectionFontSize, setSelectionFontSize] = useState<number | null>(null);
   
   const editorRef = useRef<HTMLDivElement>(null);
   const dateKey = formatDateForStorage(currentDate);
 
   // --- Auth & Init Effect ---
   useEffect(() => {
-    // Check active session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoadingSession(false);
     });
 
-    // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (!session) {
-        // Clear local sensitive data on logout if desired, 
-        // strictly speaking localEntries might still be there from localStorage
-        // but for safety in shared environments:
         setEntries({}); 
       }
     });
@@ -64,31 +60,26 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // --- Data Loading Effect (Dependent on Session) ---
+  // --- Data Loading Effect ---
   useEffect(() => {
     if (!session) return;
 
-    // Apply theme
     if (settings.darkMode) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
 
-    // Ensure contentEditable uses <div>
     document.execCommand('defaultParagraphSeparator', false, 'div');
 
-    // 1. Load Local first
     const localData = loadEntries();
     setEntries(localData);
     
-    // 2. Fetch Remote and Merge (Only if logged in)
     fetchAndMergeEntries(localData).then(mergedData => {
       if (JSON.stringify(mergedData) !== JSON.stringify(localData)) {
         setEntries(mergedData);
         saveEntries(mergedData);
         
-        // Refresh editor if needed
         const updatedCurrentEntry = mergedData[dateKey];
         if (updatedCurrentEntry) {
           setEditorContent(updatedCurrentEntry.content);
@@ -99,13 +90,12 @@ const App: React.FC = () => {
       }
     });
 
-    // Auto-fix contrast
     const defaultLightColor = '#111827';
     const defaultDarkColor = '#F3F4F6';
     if (settings.darkMode && settings.editorColor === defaultLightColor) {
       setSettings(prev => ({ ...prev, editorColor: defaultDarkColor }));
     }
-  }, [session]); // Re-run when session changes
+  }, [session]);
 
   // Update theme when settings change
   useEffect(() => {
@@ -150,7 +140,6 @@ const App: React.FC = () => {
     setEntries(newEntries);
     saveEntries(newEntries); 
     
-    // Remote Save
     if (session) {
       upsertEntryToSupabase(newEntry).then(() => {
           setSaving(false);
@@ -178,11 +167,79 @@ const App: React.FC = () => {
     return () => clearTimeout(timer);
   }, [editorContent, handleSave, dateKey, entries]);
 
-  // Editor Handlers
-  const handleFormat = (command: string, value?: string) => {
-    document.execCommand(command, false, value);
-    editorRef.current?.focus();
+  // --- Font Size & Formatting Logic ---
+
+  const checkSelectionStyle = () => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+
+    const anchorNode = selection.anchorNode;
+    if (anchorNode && anchorNode.parentElement) {
+      // Check if we are inside the editor
+      if (editorRef.current && (editorRef.current.contains(anchorNode) || editorRef.current === anchorNode)) {
+        const computed = window.getComputedStyle(anchorNode.nodeType === 1 ? anchorNode as Element : anchorNode.parentElement);
+        const fontSizePx = computed.fontSize;
+        const size = parseInt(fontSizePx);
+        if (!isNaN(size)) {
+          setSelectionFontSize(size);
+        }
+      }
+    }
+  };
+
+  const applyFontSize = (size: number) => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+
+    if (!selection.isCollapsed) {
+      // Apply to selection using the "font size 7" hook method
+      // This is a robust way to apply inline styles in contentEditable without external libraries
+      document.execCommand('styleWithCSS', false, 'true');
+      document.execCommand('fontSize', false, '7');
+
+      const fontElements = document.getElementsByTagName("font");
+      // Iterate backwards to avoid index issues during replacement
+      for (let i = fontElements.length - 1; i >= 0; i--) {
+        const font = fontElements[i];
+        if (font.size === "7") {
+          const span = document.createElement("span");
+          span.style.fontSize = `${size}px`;
+          
+          // Move children to span
+          while (font.firstChild) {
+            span.appendChild(font.firstChild);
+          }
+          
+          if (font.parentNode) {
+            font.parentNode.replaceChild(span, font);
+          }
+        }
+      }
+      document.execCommand('styleWithCSS', false, 'false');
+    } else {
+      // No selection: User is setting the "default" for next typing or global
+      // We update the global setting so it persists as preference.
+      // Note: Typing immediately after this might rely on browser default unless we inject span,
+      // but this satisfies the requirement of not changing existing text.
+    }
+    
+    setSelectionFontSize(size);
+    updateSetting('editorFontSize', size);
+    
+    // Trigger update
     setEditorContent(editorRef.current?.innerHTML || '');
+    editorRef.current?.focus();
+  };
+
+  const handleFormat = (command: string, value?: string) => {
+    if (command === 'fontSize' && value) {
+      applyFontSize(parseInt(value));
+    } else {
+      document.execCommand(command, false, value);
+      editorRef.current?.focus();
+      setEditorContent(editorRef.current?.innerHTML || '');
+      checkSelectionStyle();
+    }
   };
 
   const handleExport = () => {
@@ -286,6 +343,7 @@ const App: React.FC = () => {
         {/* Toolbar */}
         <EditorToolbar 
           settings={settings}
+          selectionFontSize={selectionFontSize}
           onSettingChange={updateSetting}
           onFormat={handleFormat}
           onSave={handleSave}
@@ -311,12 +369,19 @@ const App: React.FC = () => {
               w-full min-h-[60vh] outline-none max-w-4xl text-left editor-content
               ${fontClass}
             `}
+            // Important: We removed fontSize from here to allow inline styles to take precedence correctly
+            // and to prevent changing the entire document when changing the dropdown.
             style={{ 
-              fontSize: `${settings.editorFontSize}px`,
               color: settings.editorColor,
               lineHeight: '1.6'
             }}
-            onInput={(e) => setEditorContent(e.currentTarget.innerHTML)}
+            onInput={(e) => {
+              setEditorContent(e.currentTarget.innerHTML);
+              checkSelectionStyle();
+            }}
+            onMouseUp={checkSelectionStyle}
+            onKeyUp={checkSelectionStyle}
+            onClick={checkSelectionStyle}
           />
         </div>
 

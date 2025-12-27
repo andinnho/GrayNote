@@ -19,6 +19,7 @@ import { AppSettings, FontFamily } from '../types';
 
 interface EditorToolbarProps {
   settings: AppSettings;
+  selectionFontSize: number | null;
   onSettingChange: (key: keyof AppSettings, value: any) => void;
   onFormat: (command: string, value?: string) => void;
   onSave: () => void;
@@ -29,6 +30,7 @@ interface EditorToolbarProps {
 
 export const EditorToolbar: React.FC<EditorToolbarProps> = ({
   settings,
+  selectionFontSize,
   onSettingChange,
   onFormat,
   onSave,
@@ -60,6 +62,10 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
     onFormat('insertText', emoji);
     setShowEmojiPicker(false);
   };
+
+  // Determine which font size to show
+  // If we have a detected selection size, use it. Otherwise fall back to the global setting.
+  const currentFontSize = selectionFontSize || settings.editorFontSize;
 
   return (
     <div className="sticky top-0 z-20 flex flex-col gap-3 px-6 py-4 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-sm border-b border-gray-200 dark:border-gray-800 shadow-sm transition-all">
@@ -122,11 +128,11 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
         {/* Separator */}
         <div className="w-px h-5 bg-gray-200 dark:bg-gray-600" />
 
-        {/* Font Size Selector (New) */}
+        {/* Font Size Selector */}
         <div className="flex items-center gap-1 min-w-fit px-1 relative">
           <select 
-            value={settings.editorFontSize}
-            onChange={(e) => onSettingChange('editorFontSize', Number(e.target.value))}
+            value={currentFontSize}
+            onChange={(e) => onFormat('fontSize', e.target.value)}
             className="h-8 w-16 pl-3 pr-1 rounded-md border border-transparent hover:border-gray-200 dark:hover:border-gray-600 bg-transparent text-sm text-textMain focus:ring-2 focus:ring-primary/20 focus:outline-none font-medium cursor-pointer transition-all appearance-none text-center"
             title="Font Size"
           >
