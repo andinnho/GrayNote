@@ -70,6 +70,7 @@ const App: React.FC = () => {
       document.documentElement.classList.remove('dark');
     }
 
+    // Use div for paragraphs to avoid default block margin issues
     document.execCommand('defaultParagraphSeparator', false, 'div');
 
     const localData = loadEntries();
@@ -172,42 +173,28 @@ const App: React.FC = () => {
   const checkSelectionStyle = () => {
     const selection = window.getSelection();
     
-    // Safety check: is selection inside editor?
     if (!selection || selection.rangeCount === 0 || !editorRef.current) {
       setSelectionFontSize(null);
       return;
     }
 
-    let anchorNode = selection.anchorNode;
+    const anchorNode = selection.anchorNode;
     
-    // Traverse up to find if we are inside editor
-    let currentNode: Node | null = anchorNode;
-    let isInsideEditor = false;
-    while (currentNode) {
-      if (currentNode === editorRef.current) {
-        isInsideEditor = true;
-        break;
-      }
-      currentNode = currentNode.parentNode;
-    }
-
-    if (!isInsideEditor) {
-      // Don't clear here, just ignore
+    // Check if inside editor
+    if (!editorRef.current.contains(anchorNode)) {
       return;
     }
 
     if (anchorNode) {
-       // If text node, get parent
+       // Get computed style of current text position
        const element = anchorNode.nodeType === 3 ? anchorNode.parentElement : anchorNode as HTMLElement;
        
        if (element) {
          const computed = window.getComputedStyle(element);
-         const fontSizePx = computed.fontSize; // returns "16px"
-         // Parse absolute value
+         const fontSizePx = computed.fontSize;
          const size = Math.round(parseFloat(fontSizePx)); 
          
          if (!isNaN(size)) {
-           // Only update selection state if it's different to avoid loops
            setSelectionFontSize(size);
          }
        }
@@ -218,92 +205,93 @@ const App: React.FC = () => {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0 || !editorRef.current) return;
 
-    // 1. ISOLATION: Check if we have a text selection or just a cursor
     if (!selection.isCollapsed) {
-      // === HAS SELECTION ===
+      // === SELECTION MODE ===
+      // Apply size ONLY to selected text.
+      // Do NOT update global editorFontSize.
+
+      // 1. Create a unique marker font-family
+      const markerId = `fs-marker-${Date.now()}`;
       
-      // Technique: Use fontName as a temporary marker
-      const tempFontName = "GrayNoteTempFont_" + Date.now();
-      
-      // We must toggle styleWithCSS to ensure fontName uses <font face> or span based on browser,
-      // but execCommand fontName usually produces <font face="...">
+      // 2. Apply marker to selection using native command (handles splitting tags correctly)
       document.execCommand('styleWithCSS', false, 'true');
-      document.execCommand('fontName', false, tempFontName);
+      document.execCommand('fontName', false, markerId);
       document.execCommand('styleWithCSS', false, 'false');
 
-      // Find all elements with this font family
-      const fontElements = editorRef.current.querySelectorAll(`font[face="${tempFontName}"], span[style*="${tempFontName}"]`);
+      // 3. Find all elements that got the marker
+      // Note: We look for both <font face="..."> and <span style="font-family: ...">
+      const markers = editorRef.current.querySelectorAll(`font[face="${markerId}"], span[style*="${markerId}"]`);
       
-      fontElements.forEach(elem => {
-        // Create the clean span
+      markers.forEach(markerEl => {
+        // Create the new container
         const span = document.createElement('span');
         span.style.fontSize = `${size}px`;
         
-        // Helper to recursively remove existing font-size styles from children
-        // This prevents nesting issues where an inner span overrides our new outer span
-        const cleanChildren = (node: Node) => {
-           if (node.nodeType === 1) { // Element
-              const el = node as HTMLElement;
-              // Clear inline font-size
-              if (el.style.fontSize) {
-                 el.style.fontSize = '';
-                 if (el.getAttribute('style') === '') el.removeAttribute('style');
-              }
-              // Clear font tag size attribute (deprecated but possible)
-              if (el.tagName === 'FONT' && el.hasAttribute('size')) {
-                 el.removeAttribute('size');
-              }
-              // Recursively clean children
-              Array.from(el.childNodes).forEach(child => cleanChildren(child));
-           }
+        // Helper to clean styles from children recursively
+        // This ensures "Absolute" application by removing nested font sizes
+        const cleanElement = (el: HTMLElement) => {
+          // Clear font size inline style
+          if (el.style) {
+             el.style.fontSize = ''; 
+             el.style.fontFamily = ''; // Also clear the marker if it stuck
+          }
+          // Clear font tag size/face
+          if (el.tagName === 'FONT') {
+             el.removeAttribute('size');
+             el.removeAttribute('face');
+          }
+          
+          // Recurse to children
+          Array.from(el.childNodes).forEach(child => {
+            if (child.nodeType === 1) { // Element
+               cleanElement(child as HTMLElement);
+            }
+          });
         };
 
-        // Move all children to the new span, cleaning them as we go
-        while (elem.firstChild) {
-          const child = elem.firstChild;
-          cleanChildren(child);
+        // Move children to new span and clean them
+        while (markerEl.firstChild) {
+          const child = markerEl.firstChild;
+          if (child.nodeType === 1) {
+            cleanElement(child as HTMLElement);
+          }
           span.appendChild(child);
         }
-        
-        // Replace the temporary marker with our clean span
-        if (elem.parentNode) {
-          elem.parentNode.replaceChild(span, elem);
+
+        // Replace marker
+        if (markerEl.parentNode) {
+          markerEl.parentNode.replaceChild(span, markerEl);
         }
       });
       
-      // Update UI to reflect the change on the selection immediately
       setSelectionFontSize(size);
 
     } else {
-      // === NO SELECTION (CURSOR ONLY) ===
-      // Update global setting for future typing
+      // === CURSOR MODE (NO SELECTION) ===
+      // Update global setting for FUTURE typing
       updateSetting('editorFontSize', size);
       setSelectionFontSize(size);
 
-      // Insert a zero-width space span so typing happens inside it immediately
+      // Insert invisible character with new style to force browser to adopt it
       const range = selection.getRangeAt(0);
-      
-      // Check if we are already inside a span we can just update?
-      // For simplicity and robustness, we insert a new zero-width container
       const span = document.createElement('span');
       span.style.fontSize = `${size}px`;
       span.innerHTML = '&#8203;'; // Zero width space
       
-      // If we are just clicking and changing, we insert this marker.
-      // NOTE: This might accumulate empty spans if user changes multiple times without typing.
-      // But browsers usually clean up empty spans.
-      
-      range.deleteContents();
+      range.deleteContents(); // Should be empty but safe to call
       range.insertNode(span);
       
-      // Move cursor inside the span, after the zero-width space
-      range.setStart(span.childNodes[0], 1);
+      // Move cursor inside the zero-width space
+      // We set it after the character so user types "out" of the void but inside the span
+      const textNode = span.childNodes[0];
+      range.setStart(textNode, 1);
       range.collapse(true);
+      
       selection.removeAllRanges();
       selection.addRange(range);
     }
     
-    // Trigger content update
+    // Force React sync
     setEditorContent(editorRef.current.innerHTML);
     editorRef.current.focus();
   };
@@ -446,7 +434,7 @@ const App: React.FC = () => {
               w-full min-h-[60vh] outline-none max-w-4xl text-left editor-content
               ${fontClass}
             `}
-            // Important: We REMOVE fontSize from here to avoid global override on selection
+            // Removed global fontSize to allow inline styles to win
             style={{ 
               color: settings.editorColor,
               lineHeight: '1.6'
